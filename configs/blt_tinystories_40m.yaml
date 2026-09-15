@@ -1,0 +1,76 @@
+# TinyStories 40M BLT configuration tuned for consumer GPU (RTX 3050 4GB VRAM)
+# Reference: training_plan.md
+
+data:
+  source: roneneldan/TinyStories
+  subset_bytes_target: 280000000
+  val_fraction: 0.04
+  dedup: true
+  doc_boundary_token: 256
+  vocab_size: 260 # 256 raw bytes + special tokens (BOS, EOS, PAD, DOC_BOUNDARY)
+
+model:
+  name: blt_tinystories_40m
+  vocab_size: 260
+  local_encoder:
+    layers: 1
+    hidden: 256
+    heads: 4
+    window_size: 256
+  latent_transformer:
+    layers: 7
+    hidden: 480
+    heads: 8
+    grad_checkpointing: true
+  local_decoder:
+    layers: 4
+    hidden: 256
+    heads: 4
+    window_size: 256
+  cross_attention:
+    heads: 4
+    k: 2
+  hash_ngrams:
+    sizes: [3, 4, 5]
+    vocab_per_size: 20000
+
+entropy_model:
+  layers: 3
+  hidden: 128
+  heads: 4
+  window: 256
+  context_reset_at: doc_boundary
+  target_avg_patch_size: 4.5
+  rule: monotonic
+  threshold: 0.5
+
+training:
+  precision: bf16
+  optimizer: adamw_8bit
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  weight_decay: 0.15
+  dropout: 0.08
+  peak_lr: 3.0e-4
+  warmup_steps: 2000
+  lr_floor_fraction: 0.1
+  grad_clip_norm: 1.0
+  physical_batch_size: 4
+  grad_accum_steps: 16
+  context_length_start: 384
+  context_length_final: 768
+  planned_epochs: 20
+
+checkpointing:
+  save_every_steps: 1000
+  keep_rotating: 2
+  keep_best_val: true
+  save_full_state: true
+
+logging:
+  eval_every_steps: 1000
+  qualitative_sample_every_steps: 2000
+  fixed_prompts: 8
+  sampling:
+    method: nucleus
+    top_p: 0.9

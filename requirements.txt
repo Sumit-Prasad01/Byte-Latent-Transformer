@@ -1,0 +1,29 @@
+# Core Deep Learning & Tensor Operations
+torch>=2.2.0
+numpy>=1.24.0
+
+# Acceleration & Custom Kernels
+numba>=0.58.0
+
+# Configuration & Utilities
+pyyaml>=6.0
+tqdm>=4.66.0
+
+# Data & Tokenization
+datasets>=2.18.0
+tokenizers>=0.15.0
+tiktoken>=0.6.0
+
+# Memory Optimization (8-bit AdamW for RTX 3050 4GB)
+bitsandbytes>=0.42.0; sys_platform != "win32" or platform_machine == "AMD64"
+
+# Evaluation & Benchmarks
+rapidfuzz>=3.6.0
+sacrebleu>=2.4.0
+
+# Testing & Quality
+pytest>=8.0.0
+
+# Experiment Tracking & Logging
+tensorboard>=2.16.0
+wandb>=0.16.0

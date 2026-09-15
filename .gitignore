@@ -1,0 +1,61 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+.venv/
+ENV/
+
+# Testing & Linting
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Datasets & Checkpoints
+data/
+*.bin
+*.pt
+*.pth
+checkpoints/
+artifacts/
+
+# Logs & Metrics
+wandb/
+runs/
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+cpp_usage_plan.md
+final_step_by_step_implementation_plan.md
+implementation_plan.md
+training_plan.md
+logs/
+data/
+artifacts/

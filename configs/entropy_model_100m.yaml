@@ -1,0 +1,11 @@
+# Small byte-level entropy model configuration (~100M parameters)
+# Reference: Section 4.2 of BLT paper
+
+model_name: entropy_model_100m
+vocab_size: 260
+layers: 14
+hidden: 512
+heads: 8
+window_size: 512
+learning_rate: 4.0e-4
+context_length: 512

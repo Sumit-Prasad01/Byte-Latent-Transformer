@@ -1,0 +1,12 @@
+# Baseline BPE (Llama-style) decoder-only transformer control
+# Reference: Section 4.1 & Section 4.7 of BLT paper
+
+model_name: baseline_bpe_llama
+tokenizer: bpe
+vocab_size: 32000
+hidden: 1024
+layers: 16
+heads: 16
+context_length_tokens: 2048
+learning_rate: 4.0e-4
+weight_decay: 0.1
