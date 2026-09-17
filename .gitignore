@@ -59,3 +59,19 @@ training_plan.md
 logs/
 data/
 artifacts/
+
+# Prerequisites/Outputs
+*.exe
+*.dll
+*.a
+*.so
+*.lib
+*.pdb
+
+# Build Directories
+build/
+bin/
+obj/
+out/
+.vs/
+CMakeProfiles/
