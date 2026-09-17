@@ -506,3 +506,22 @@ class NativeStreamingPatcher:
         if self._handle and _DLL_HANDLE is not None:
             _DLL_HANDLE.blt_streaming_patcher_destroy(self._handle)
             self._handle = None
+
+
+def streaming_patcher_feed_native(
+    byte_seq: Union[bytes, List[int], np.ndarray],
+    entropy_seq: Union[np.ndarray, List[float]],
+    theta_r: float = 0.8,
+    max_patch_size: int = 16,
+    reset_on_newline: bool = True,
+    doc_boundary_token: int = 256,
+) -> List[int]:
+    """Feed a sequence of bytes and entropies into a streaming patcher and collect boundary decisions."""
+    patcher = NativeStreamingPatcher(
+        theta_r=theta_r,
+        max_patch_size=max_patch_size,
+        reset_on_newline=reset_on_newline,
+        doc_boundary_token=doc_boundary_token,
+    )
+    return [patcher.feed(int(b), float(h)) for b, h in zip(byte_seq, entropy_seq)]
+

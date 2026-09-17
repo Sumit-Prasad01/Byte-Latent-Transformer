@@ -6,6 +6,7 @@ from blt.csrc.bridge import (
     compute_ngram_hashes_native,
     monotonic_boundary_mask_native,
     streaming_patcher_feed_native,
+    NativeStreamingPatcher,
     pack_patch_batches_native,
     dedup_stories_native,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "compute_ngram_hashes_native",
     "monotonic_boundary_mask_native",
     "streaming_patcher_feed_native",
+    "NativeStreamingPatcher",
     "pack_patch_batches_native",
     "dedup_stories_native",
 ]
