@@ -53,13 +53,13 @@ def main():
 
     logger.info(f"Loading datasets (train={args.train_data}, val={args.val_data})...")
     train_dataset = ByteDataset(
-        data_path=args.train_data,
-        seq_len=init_seq_len + 1,  # +1 for autoregressive target shift
+        data=args.train_data,
+        sequence_length=init_seq_len + 1,  # +1 for autoregressive target shift
         stride=init_seq_len,
     )
     val_dataset = ByteDataset(
-        data_path=args.val_data,
-        seq_len=init_seq_len + 1,
+        data=args.val_data,
+        sequence_length=init_seq_len + 1,
         stride=init_seq_len,
     )
 
