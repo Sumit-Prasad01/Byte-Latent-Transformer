@@ -1,12 +1,18 @@
-# Baseline BPE (Llama-style) decoder-only transformer control
+# Parameter-matched ~40M Baseline BPE control for RTX 3050 4GB
 # Reference: Section 4.1 & Section 4.7 of BLT paper
 
-model_name: baseline_bpe_llama
+model_name: baseline_bpe_llama_40m
 tokenizer: bpe
 vocab_size: 32000
-hidden: 1024
-layers: 16
-heads: 16
-context_length_tokens: 2048
-learning_rate: 4.0e-4
-weight_decay: 0.1
+dim: 384
+layers: 8
+heads: 6
+max_seq_len: 512
+grad_checkpointing: true
+
+training:
+  precision: bf16
+  batch_size: 4
+  grad_accum_steps: 16
+  learning_rate: 3.0e-4
+  weight_decay: 0.1

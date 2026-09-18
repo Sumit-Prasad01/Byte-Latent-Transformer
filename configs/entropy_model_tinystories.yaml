@@ -1,0 +1,25 @@
+# Small byte-level entropy model configuration (~1.5M parameters) for TinyStories on RTX 3050 4GB
+# Reference: Section 4.2 of BLT paper & Table 10
+
+model_name: entropy_model_tinystories
+vocab_size: 260
+layers: 3
+hidden: 128
+heads: 4
+window_size: 256
+max_seq_len: 1024
+
+training:
+  batch_size: 16
+  learning_rate: 5.0e-4
+  min_lr: 5.0e-5
+  weight_decay: 0.1
+  warmup_steps: 200
+  max_steps: 2000
+  eval_every: 250
+  precision: bf16
+
+calibration:
+  target_avg_patch_size: 4.5
+  tolerance: 0.1
+  context_reset: newline
