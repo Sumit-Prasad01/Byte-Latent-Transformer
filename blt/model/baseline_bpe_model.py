@@ -108,8 +108,8 @@ class BaselineTransformer(nn.Module):
         if targets is not None:
             # Shift targets for next-token prediction if not already shifted
             loss = F.cross_entropy(
-                logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                logits.reshape(-1, self.vocab_size),
+                targets.reshape(-1),
                 ignore_index=-100,
             )
 

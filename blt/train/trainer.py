@@ -61,7 +61,7 @@ class BLTTrainer:
         # Precision autocast setup
         self.use_amp = self.device == "cuda"
         self.amp_dtype = torch.bfloat16 if self.precision == "bf16" and torch.cuda.is_bf16_supported() else torch.float16
-        self.scaler = torch.cuda.amp.GradScaler(enabled=(self.use_amp and self.amp_dtype == torch.float16))
+        self.scaler = torch.amp.GradScaler("cuda", enabled=(self.use_amp and self.amp_dtype == torch.float16))
 
         # Optimizer
         self.optimizer = configure_optimizers(

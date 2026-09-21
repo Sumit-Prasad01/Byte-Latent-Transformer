@@ -41,6 +41,7 @@ data/
 *.pth
 checkpoints/
 artifacts/
+plots/
 
 # Logs & Metrics
 wandb/
