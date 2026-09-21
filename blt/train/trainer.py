@@ -73,9 +73,16 @@ class BLTTrainer:
             optimizer_type=t_cfg.get("optimizer", "adamw_8bit"),
         )
 
-        # Learning rate schedule
-        self.total_steps = len(self.train_loader) * self.planned_epochs // self.grad_accum_steps
-        self.total_steps = max(self.total_steps, self.warmup_steps + 1000)
+        # Learning rate schedule & step budgeting
+        self.max_steps = t_cfg.get("max_steps", None)
+        if self.max_steps is not None:
+            self.total_steps = int(self.max_steps)
+        else:
+            self.total_steps = len(self.train_loader) * self.planned_epochs // self.grad_accum_steps
+            self.total_steps = max(self.total_steps, self.warmup_steps + 1000)
+
+        self.steps_per_epoch = max(1, self.total_steps // max(1, self.planned_epochs))
+
         self.scheduler = get_cosine_schedule_with_warmup(
             optimizer=self.optimizer,
             warmup_steps=self.warmup_steps,
@@ -102,6 +109,7 @@ class BLTTrainer:
 
         self.global_step = 0
         self.best_val_bpb = float("inf")
+        self._train_iter = None
 
     def _get_current_context_length(self) -> int:
         """Calculate ramped context length based on current training step."""
@@ -111,17 +119,27 @@ class BLTTrainer:
         return int(self.context_start + (self.context_final - self.context_start) * progress)
 
     def train_epoch(self, epoch: int) -> float:
-        """Execute one training epoch."""
+        """Execute one training epoch with step budgeting."""
         self.model.train()
         epoch_loss = 0.0
-        num_batches = len(self.train_loader)
         accum_loss = 0.0
         start_time = time.perf_counter()
 
-        logger.info(f"Starting epoch {epoch + 1}/{self.planned_epochs} ({num_batches} batches)...")
-        pbar = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}", leave=False)
+        logger.info(f"Starting epoch {epoch + 1}/{self.planned_epochs} (target: {self.steps_per_epoch} optimizer steps)...")
+        pbar = tqdm(total=self.steps_per_epoch, desc=f"Epoch {epoch + 1}/{self.planned_epochs}", leave=True)
 
-        for b_idx, batch in enumerate(pbar):
+        step_in_epoch = 0
+        micro_step = 0
+
+        while step_in_epoch < self.steps_per_epoch and self.global_step < self.total_steps:
+            if self._train_iter is None:
+                self._train_iter = iter(self.train_loader)
+            try:
+                batch = next(self._train_iter)
+            except StopIteration:
+                self._train_iter = iter(self.train_loader)
+                batch = next(self._train_iter)
+
             # Resolve batch tokens
             if isinstance(batch, (tuple, list)):
                 tokens = batch[0]
@@ -149,9 +167,10 @@ class BLTTrainer:
                 scaled_loss.backward()
 
             accum_loss += loss.item()
+            micro_step += 1
 
             # Optimizer step on accumulation boundary
-            if (b_idx + 1) % self.grad_accum_steps == 0 or (b_idx + 1) == num_batches:
+            if micro_step % self.grad_accum_steps == 0:
                 if self.scaler.is_enabled():
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
@@ -164,15 +183,19 @@ class BLTTrainer:
                 self.scheduler.step()
                 self.optimizer.zero_grad(set_to_none=True)
                 self.global_step += 1
+                step_in_epoch += 1
+                pbar.update(1)
 
                 step_loss = accum_loss / self.grad_accum_steps
                 step_bpb = loss_to_bpb(step_loss)
+                epoch_loss += step_loss
                 accum_loss = 0.0
 
                 # Telemetry
                 lr_curr = self.optimizer.param_groups[0]["lr"]
                 vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024) if self.device == "cuda" else 0.0
                 pbar.set_postfix({
+                    "step": f"{self.global_step}/{self.total_steps}",
                     "loss": f"{step_loss:.4f}",
                     "bpb": f"{step_bpb:.3f}",
                     "lr": f"{lr_curr:.2e}",
@@ -211,9 +234,10 @@ class BLTTrainer:
                 if self.global_step % self.qualitative_sample_every == 0:
                     self.generate_sample("Once upon a time")
 
+        pbar.close()
         elapsed = time.perf_counter() - start_time
-        logger.info(f"Epoch {epoch + 1} completed in {elapsed:.1f}s. Global step: {self.global_step}")
-        return epoch_loss
+        logger.info(f"Epoch {epoch + 1}/{self.planned_epochs} completed in {elapsed:.1f}s ({elapsed/60:.1f}m). Global step: {self.global_step}/{self.total_steps}")
+        return epoch_loss / max(1, step_in_epoch)
 
     @torch.no_grad()
     def evaluate(self, max_batches: int = 50) -> float:
@@ -233,23 +257,49 @@ class BLTTrainer:
     def generate_sample(self, prompt: str = "Once upon a time", max_new_tokens: int = 60) -> str:
         """Sample generation during training to monitor qualitative text coherence."""
         self.model.eval()
-        prompt_bytes = list(prompt.encode("utf-8"))
-        prompt_tensor = torch.tensor([prompt_bytes], dtype=torch.long, device=self.device)
+        try:
+            prompt_bytes = list(prompt.encode("utf-8"))
+            prompt_tensor = torch.tensor([prompt_bytes], dtype=torch.long, device=self.device)
 
-        out_tokens = self.model.generate(
-            prompt_tokens=prompt_tensor,
-            max_new_tokens=max_new_tokens,
-            temperature=0.8,
-            top_p=0.9,
-        )
-        raw_bytes = bytes([b for b in out_tokens[0].cpu().tolist() if b < 256])
-        text = raw_bytes.decode("utf-8", errors="replace")
-        logger.info(f"[Sample @ Step {self.global_step}]: {text}")
-        return text
+            out_tokens = self.model.generate(
+                prompt_tokens=prompt_tensor,
+                max_new_tokens=max_new_tokens,
+                temperature=0.8,
+                top_p=0.9,
+            )
+            raw_bytes = bytes([b for b in out_tokens[0].cpu().tolist() if b < 256])
+            text = raw_bytes.decode("utf-8", errors="replace")
+            logger.info(f"[Sample @ Step {self.global_step}]: {text}")
+            return text
+        except Exception as e:
+            logger.warning(f"Could not generate qualitative sample at step {self.global_step}: {e}")
+            return ""
+        finally:
+            self.model.train()
 
     def train(self):
         """Execute full training across planned epochs."""
         logger.info(f"Starting BLT pretraining for {self.planned_epochs} epochs (~{self.total_steps} optimizer steps)...")
-        for epoch in range(self.planned_epochs):
+        start_epoch = self.global_step // self.steps_per_epoch
+        for epoch in range(start_epoch, self.planned_epochs):
+            if self.global_step >= self.total_steps:
+                break
             self.train_epoch(epoch)
-        logger.info("Training complete!")
+
+        # Final validation evaluation if not just evaluated
+        if self.val_loader is not None and self.global_step % self.eval_every_steps != 0:
+            final_bpb = self.evaluate()
+            is_best = final_bpb < self.best_val_bpb
+            if is_best:
+                self.best_val_bpb = final_bpb
+            self.checkpoint_manager.save(
+                step=self.global_step,
+                epoch=self.planned_epochs - 1,
+                model=self.model,
+                optimizer=self.optimizer,
+                scheduler=self.scheduler,
+                val_bpb=final_bpb,
+                is_best=is_best,
+            )
+
+        logger.info(f"Training complete! Final best validation BPB: {self.best_val_bpb:.4f}")

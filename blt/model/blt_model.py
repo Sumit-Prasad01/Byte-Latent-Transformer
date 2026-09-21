@@ -32,6 +32,8 @@ def compute_patch_indices_from_boundaries(patch_boundaries: torch.Tensor) -> Tup
         num_patches: Total number of patches.
     """
     bounds = patch_boundaries.clone().long()
+    if bounds.ndim == 1:
+        bounds = bounds.unsqueeze(0)
     bounds[:, 0] = 1  # First byte is always start of patch 0
     indices = torch.cumsum(bounds, dim=-1) - 1
     num_patches = int(indices.max().item()) + 1
@@ -231,6 +233,8 @@ class ByteLatentTransformer(nn.Module):
                     bytes_seq=tokens.cpu().numpy(),
                 )
                 bounds = torch.from_numpy(bounds_np).to(device=tokens.device)
+                if bounds.ndim == 1 and tokens.ndim == 2:
+                    bounds = bounds.unsqueeze(0)
             p_indices, num_patches = compute_patch_indices_from_boundaries(bounds)
         else:
             # Fallback uniform strided patch indices

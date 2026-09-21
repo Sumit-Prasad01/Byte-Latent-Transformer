@@ -51,25 +51,26 @@ training:
   eps: 1.0e-8
   weight_decay: 0.15
   dropout: 0.08
-  peak_lr: 3.0e-4
-  warmup_steps: 2000
+  peak_lr: 4.0e-4
+  warmup_steps: 500
   lr_floor_fraction: 0.1
   grad_clip_norm: 1.0
-  physical_batch_size: 4
-  grad_accum_steps: 16
-  context_length_start: 384
+  physical_batch_size: 64
+  grad_accum_steps: 1
+  context_length_start: 768
   context_length_final: 768
-  planned_epochs: 20
+  planned_epochs: 5
+  max_steps: 7000
 
 checkpointing:
-  save_every_steps: 1000
+  save_every_steps: 700
   keep_rotating: 2
   keep_best_val: true
   save_full_state: true
 
 logging:
-  eval_every_steps: 1000
-  qualitative_sample_every_steps: 2000
+  eval_every_steps: 700
+  qualitative_sample_every_steps: 1400
   fixed_prompts: 8
   sampling:
     method: nucleus

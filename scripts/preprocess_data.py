@@ -194,6 +194,7 @@ def main():
     parser = argparse.ArgumentParser(description="Preprocess TinyStories raw text into binary shards")
     parser.add_argument(
         "--input-file",
+        "--raw-file",
         type=str,
         default=os.path.join("data", "raw", "tinystories_raw.txt"),
         help="Path to raw input text file",

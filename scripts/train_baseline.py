@@ -42,6 +42,7 @@ def main():
     parser.add_argument("--val-data", type=str, default="data/processed/val.bin", help="Path to val.bin")
     parser.add_argument("--mode", type=str, default="byte", choices=["byte", "bpe"], help="Baseline mode: byte or bpe")
     parser.add_argument("--resume", type=str, default=None, help="Optional checkpoint to resume from")
+    parser.add_argument("--steps", type=int, default=3500, help="Total training steps (default: 3500 for ~1hr run)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--dry-run", action="store_true", help="Execute 5 steps to verify memory without full training")
     parser.add_argument("--seed", type=int, default=42)
@@ -111,12 +112,15 @@ def main():
         optimizer_type="adamw_8bit",
     )
 
-    epochs = 20
-    total_steps = len(train_loader) * epochs // grad_accum_steps
+    planned_epochs = 5
+    total_steps = args.steps if args.steps is not None else (len(train_loader) * planned_epochs // grad_accum_steps)
+    warmup_steps = min(300, total_steps // 10)
+    steps_per_epoch = max(1, total_steps // planned_epochs)
+
     scheduler = get_cosine_schedule_with_warmup(
         optimizer=optimizer,
-        warmup_steps=1000,
-        total_steps=max(total_steps, 2000),
+        warmup_steps=warmup_steps,
+        total_steps=total_steps,
     )
 
     ckpt_dir = os.path.join("checkpoints", f"baseline_{args.mode}")
@@ -156,13 +160,27 @@ def main():
         return
 
     # 4. Training Loop
-    logger.info(f"Starting Baseline pretraining for {epochs} epochs...")
-    for epoch in range(epochs):
+    logger.info(f"Starting Baseline pretraining for {planned_epochs} epochs (~{total_steps} steps)...")
+    train_iter = None
+
+    for epoch in range(planned_epochs):
+        if global_step >= total_steps:
+            break
         model.train()
         accum_loss = 0.0
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", leave=False)
+        pbar = tqdm(total=steps_per_epoch, desc=f"Epoch {epoch + 1}/{planned_epochs}", leave=True)
+        step_in_epoch = 0
+        micro_step = 0
 
-        for b_idx, batch in enumerate(pbar):
+        while step_in_epoch < steps_per_epoch and global_step < total_steps:
+            if train_iter is None:
+                train_iter = iter(train_loader)
+            try:
+                batch = next(train_iter)
+            except StopIteration:
+                train_iter = iter(train_loader)
+                batch = next(train_iter)
+
             tokens = batch.to(args.device)
             inputs, targets = tokens[:, :-1], tokens[:, 1:]
 
@@ -176,8 +194,9 @@ def main():
                 scaled_loss.backward()
 
             accum_loss += loss.item()
+            micro_step += 1
 
-            if (b_idx + 1) % grad_accum_steps == 0 or (b_idx + 1) == len(train_loader):
+            if micro_step % grad_accum_steps == 0:
                 if scaler.is_enabled():
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -190,18 +209,21 @@ def main():
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
+                step_in_epoch += 1
+                pbar.update(1)
 
                 step_loss = accum_loss / grad_accum_steps
                 step_bpb = loss_to_bpb(step_loss)
                 accum_loss = 0.0
 
                 pbar.set_postfix({
+                    "step": f"{global_step}/{total_steps}",
                     "loss": f"{step_loss:.4f}",
                     "bpb": f"{step_bpb:.3f}",
                     "lr": f"{optimizer.param_groups[0]['lr']:.2e}",
                 })
 
-                if global_step % 1000 == 0:
+                if global_step % 500 == 0:
                     model.eval()
                     val_bpb = evaluate_byte_model_bpb(model, val_loader, device=args.device, max_batches=30)
                     is_best = val_bpb < best_val_bpb
@@ -217,6 +239,8 @@ def main():
                         is_best=is_best,
                     )
                     model.train()
+
+        pbar.close()
 
     logger.info("Baseline training complete!")
 

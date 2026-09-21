@@ -25,6 +25,7 @@ class ByteEntropyModel(nn.Module):
         n_heads: int = 4,
         head_dim: Optional[int] = None,
         sliding_window: int = 256,
+        window_size: Optional[int] = None,
         max_seq_len: int = 4096,
         rope_theta: float = 500000.0,
         dropout: float = 0.0,
@@ -35,7 +36,7 @@ class ByteEntropyModel(nn.Module):
         self.dim = dim
         self.n_layers = n_layers
         self.n_heads = n_heads
-        self.sliding_window = sliding_window
+        self.sliding_window = window_size if window_size is not None else sliding_window
         self.max_seq_len = max_seq_len
 
         self.tok_embeddings = nn.Embedding(vocab_size, dim)
@@ -129,18 +130,18 @@ class ByteEntropyModel(nn.Module):
         self.eval()
         device = next(self.parameters()).device
 
-        if isinstance(byte_sequence, str):
-            byte_arr = np.frombuffer(byte_sequence.encode("utf-8"), dtype=np.uint8)
+        is_1d = False
+        if isinstance(byte_sequence, (str, bytes)):
+            is_1d = True
+            byte_arr = np.frombuffer(byte_sequence.encode("utf-8") if isinstance(byte_sequence, str) else byte_sequence, dtype=np.uint8)
             tokens = torch.from_numpy(byte_arr.astype(np.int64)).unsqueeze(0).to(device)
-        elif isinstance(byte_sequence, bytes):
-            byte_arr = np.frombuffer(byte_sequence, dtype=np.uint8)
-            tokens = torch.from_numpy(byte_arr.astype(np.int64)).unsqueeze(0).to(device)
-        elif isinstance(byte_sequence, np.ndarray):
-            tokens = torch.from_numpy(byte_sequence.astype(np.int64)).to(device)
-            if tokens.ndim == 1:
-                tokens = tokens.unsqueeze(0)
-        elif isinstance(byte_sequence, torch.Tensor):
-            tokens = byte_sequence.to(device)
+        elif isinstance(byte_sequence, (np.ndarray, torch.Tensor)):
+            if byte_sequence.ndim == 1:
+                is_1d = True
+            if isinstance(byte_sequence, np.ndarray):
+                tokens = torch.from_numpy(byte_sequence.astype(np.int64)).to(device)
+            else:
+                tokens = byte_sequence.to(device)
             if tokens.ndim == 1:
                 tokens = tokens.unsqueeze(0)
         else:
@@ -172,4 +173,6 @@ class ByteEntropyModel(nn.Module):
                 dtype=torch.float32,
             )
 
-        return full_entropy.squeeze(0)
+        if is_1d:
+            return full_entropy.squeeze(0)
+        return full_entropy

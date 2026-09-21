@@ -89,6 +89,7 @@ class EncoderCrossAttention(nn.Module):
         # 1. Pool initial patch representations from constituent bytes
         # mask: (batch, num_patches, seq_len)
         membership = (patch_indices.unsqueeze(1) == torch.arange(num_patches, device=byte_hidden.device).view(1, num_patches, 1)).float()
+        has_bytes = (membership.sum(dim=-1, keepdim=True) > 0)  # (batch, num_patches, 1)
         counts = membership.sum(dim=-1, keepdim=True).clamp(min=1.0)
         pooled_bytes = torch.bmm(membership, byte_hidden) / counts  # (batch, num_patches, byte_dim)
 
@@ -99,13 +100,15 @@ class EncoderCrossAttention(nn.Module):
 
         # 3. Patch membership attention mask: (batch, 1, num_patches, seq_len)
         attn_mask = membership.unsqueeze(1).bool()
+        safe_attn_mask = attn_mask | (~attn_mask.any(dim=-1, keepdim=True))
 
         # 4. Attention
         out = F.scaled_dot_product_attention(
-            q, k, v, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0
+            q, k, v, attn_mask=safe_attn_mask, dropout_p=self.dropout if self.training else 0.0
         )
         out = out.transpose(1, 2).contiguous().view(bsz, num_patches, self.patch_dim)
         patch_repr = self.out_proj(out)
+        patch_repr = patch_repr * has_bytes.float()
 
         return patch_repr
 

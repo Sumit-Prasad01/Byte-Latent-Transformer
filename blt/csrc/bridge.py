@@ -260,18 +260,43 @@ def monotonic_boundary_mask_native(
         Tuple of (boundary_mask (uint8 array), num_patches (int)).
     """
     entropy = np.ascontiguousarray(entropy, dtype=np.float32)
+
+    # Support 2D batched input: (batch_size, seq_len)
+    if entropy.ndim == 2:
+        batch_size, seq_len = entropy.shape
+        masks = np.empty((batch_size, seq_len), dtype=np.uint8)
+        total_patches = 0
+        for b in range(batch_size):
+            b_bytes = bytes_arr[b] if bytes_arr is not None else None
+            m, p = monotonic_boundary_mask_native(
+                entropy[b],
+                bytes_arr=b_bytes,
+                theta_r=theta_r,
+                reset_on_newline=reset_on_newline,
+                doc_boundary_token=doc_boundary_token,
+                max_patch_size=max_patch_size,
+            )
+            masks[b] = m
+            total_patches += p
+        return masks, total_patches
+
+    entropy = np.asarray(entropy, dtype=np.float32).reshape(-1)
     seq_len = len(entropy)
     if seq_len == 0:
         return np.zeros(0, dtype=np.uint8), 0
 
     if bytes_arr is not None:
-        bytes_arr = np.ascontiguousarray(bytes_arr, dtype=np.uint8)
+        raw_bytes_for_py = np.asarray(bytes_arr).reshape(-1)
+        bytes_arr_uint8 = np.ascontiguousarray(np.clip(raw_bytes_for_py, 0, 255), dtype=np.uint8)
+    else:
+        raw_bytes_for_py = None
+        bytes_arr_uint8 = None
 
     if _HAS_NATIVE and _DLL_HANDLE is not None:
         out_boundaries = np.empty(seq_len, dtype=np.uint8)
         num_patches = ctypes.c_int64(0)
 
-        bytes_ptr = bytes_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)) if bytes_arr is not None else None
+        bytes_ptr = bytes_arr_uint8.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8)) if bytes_arr_uint8 is not None else None
 
         status = _DLL_HANDLE.blt_monotonic_boundary_mask(
             entropy.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -296,11 +321,11 @@ def monotonic_boundary_mask_native(
 
     for i in range(seq_len):
         is_boundary = False
-        byte_val = int(bytes_arr[i]) if bytes_arr is not None else 0
+        byte_val = int(raw_bytes_for_py[i]) if raw_bytes_for_py is not None else 0
 
         if i == 0:
             is_boundary = True
-        elif bytes_arr is not None and doc_boundary_token >= 0 and byte_val == doc_boundary_token:
+        elif raw_bytes_for_py is not None and doc_boundary_token >= 0 and byte_val == doc_boundary_token:
             is_boundary = True
             has_prev = False
         elif max_patch_size > 0 and current_patch_len >= max_patch_size:
@@ -316,7 +341,7 @@ def monotonic_boundary_mask_native(
             out_boundaries[i] = 0
             current_patch_len += 1
 
-        if reset_on_newline and bytes_arr is not None and byte_val == 10:  # ord('\n') == 10
+        if reset_on_newline and raw_bytes_for_py is not None and byte_val == 10:  # ord('\n') == 10
             has_prev = False
         else:
             prev_entropy = float(entropy[i])

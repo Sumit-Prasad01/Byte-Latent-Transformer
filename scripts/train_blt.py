@@ -49,18 +49,18 @@ def main():
     # 1. Datasets & DataLoaders
     t_cfg = config.get("training", {})
     batch_size = t_cfg.get("physical_batch_size", 4)
-    init_seq_len = t_cfg.get("context_length_start", 384)
+    max_seq_len = t_cfg.get("context_length_final", 768)
 
-    logger.info(f"Loading datasets (train={args.train_data}, val={args.val_data})...")
+    logger.info(f"Loading datasets (train={args.train_data}, val={args.val_data}, max_seq_len={max_seq_len})...")
     train_dataset = ByteDataset(
         data=args.train_data,
-        sequence_length=init_seq_len + 1,  # +1 for autoregressive target shift
-        stride=init_seq_len,
+        sequence_length=max_seq_len + 1,  # +1 for autoregressive target shift
+        stride=max_seq_len,
     )
     val_dataset = ByteDataset(
         data=args.val_data,
-        sequence_length=init_seq_len + 1,
-        stride=init_seq_len,
+        sequence_length=max_seq_len + 1,
+        stride=max_seq_len,
     )
 
     train_loader = ByteDataLoader(
@@ -84,7 +84,7 @@ def main():
             dim=e_cfg.get("hidden", 128),
             n_layers=e_cfg.get("layers", 3),
             n_heads=e_cfg.get("heads", 4),
-            window_size=e_cfg.get("window", 256),
+            sliding_window=e_cfg.get("window", 256),
         )
         ckpt = torch.load(args.entropy_checkpoint, map_location=args.device)
         entropy_model.load_state_dict(ckpt.get("model_state_dict", ckpt))
