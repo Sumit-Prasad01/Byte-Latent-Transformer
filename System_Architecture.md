@@ -150,7 +150,7 @@ $$H(x_t) = -\sum_{v=0}^{259} P(x_{t+1} = v \mid x_{\le t}) \log_2 P(x_{t+1} = v 
 #### 2. Monotonic Boundary Decision Kernel (`boundary_rules.cpp`)
 A byte position $t$ is designated as the start of a new patch if any of the following conditions evaluate to `True`:
 1. **Entropy Jump**: $H(x_t) - H(x_{t-1}) > \theta_r$ (with default calibrated threshold $\theta_r = 0.5$).
-2. **Context Reset**: $x_t \in \{\text{DOC\_BOUNDARY}, \texttt{'\textbackslash n'}\}$.
+2. **Context Reset**: $x_t \in \mathcal{S}_{\text{reset}}$ where the byte is a document boundary (`<DOC_BOUNDARY>`) or newline (`'\n'`).
 3. **Maximum Length Constraint**: Current patch length $l_{\text{patch}} \ge L_{\max} = 16$.
 4. **Minimum Length Guard**: Enforces $l_{\text{patch}} \ge L_{\min} = 1$ (guarantees monotonicity).
 

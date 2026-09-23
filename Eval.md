@@ -162,11 +162,11 @@ Training progressed across 5 planned epochs (7,000 global optimizer steps) with 
 Unlike fixed-stride patching (e.g., standard ViT or fixed 4-byte chunking), BLT dynamically groups bytes into patches according to information density. The Entropy Model estimates local uncertainty $H(x_t)$ at each byte position. 
 
 The C++ Native Engine evaluates the monotonic boundary condition:
-$$\text{Boundary}(t) = \mathbb{I}\left[H(x_t) - H(x_{t-1}) > \theta_r\right] \;\lor\; \mathbb{I}\left[x_t \in \{\text{DOC\_BOUNDARY}, \texttt{'\textbackslash n'}\}\right] \;\lor\; \mathbb{I}[l_{\text{patch}} \ge L_{\max}]$$
+$$\text{Boundary}(t) = \mathbb{I}\left[H(x_t) - H(x_{t-1}) > \theta_r\right] \;\lor\; \mathbb{I}\left[x_t \in \mathcal{S}_{\text{reset}}\right] \;\lor\; \mathbb{I}\left[l_{\text{patch}} \ge L_{\max}\right]$$
 
 Where:
 - $\theta_r = 0.5$ is the calibrated entropy threshold.
-- Newlines and document boundaries trigger mandatory context resets.
+- $\mathcal{S}_{\text{reset}}$ represents context reset tokens (newlines `'\n'` and `<DOC_BOUNDARY>`).
 - Patch lengths are constrained within $[1, 16]$ bytes.
 
 ```
